@@ -58,7 +58,12 @@ func (lw *innerListWatch) setRevision(rev int64) {
 }
 
 func (lw *innerListWatch) EventBus(op sdcommon.ListWatchConfig) *sdcommon.EventBus {
-	return sdcommon.NewEventBus(lw, op)
+	select {
+	case <-op.Context.Done():
+		return nil
+	default:
+		return sdcommon.NewEventBus(lw, op)
+	}
 }
 
 func (lw *innerListWatch) DoWatch(ctx context.Context, f func(*sdcommon.ListWatchResp)) error {

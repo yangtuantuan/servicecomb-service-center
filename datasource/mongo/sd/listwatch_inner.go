@@ -53,6 +53,9 @@ func (lw *mongoListWatch) List(op sdcommon.ListWatchConfig) (*sdcommon.ListWatch
 
 	for resp.Next(context.Background()) {
 		info := lw.doParseDocumentToResource(resp.Current)
+		if len(info.Key) == 0 {
+			continue
+		}
 		lwRsp.Resources = append(lwRsp.Resources, &info)
 	}
 
@@ -60,7 +63,12 @@ func (lw *mongoListWatch) List(op sdcommon.ListWatchConfig) (*sdcommon.ListWatch
 }
 
 func (lw *mongoListWatch) EventBus(op sdcommon.ListWatchConfig) *sdcommon.EventBus {
-	return sdcommon.NewEventBus(lw, op)
+	select {
+	case <-op.Context.Done():
+		return nil
+	default:
+		return sdcommon.NewEventBus(lw, op)
+	}
 }
 
 func (lw *mongoListWatch) DoWatch(ctx context.Context, f func(*sdcommon.ListWatchResp)) error {
@@ -95,17 +103,23 @@ func (lw *mongoListWatch) DoWatch(ctx context.Context, f func(*sdcommon.ListWatc
 		resource := lw.doParseWatchRspToResource(wRsp)
 
 		lwRsp := &sdcommon.ListWatchResp{}
-		lwRsp.Resources = append(lwRsp.Resources, &resource)
 		switch wRsp.OperationType {
 		case insertOp:
+			if len(resource.Key) == 0 {
+				continue
+			}
 			lwRsp.Action = sdcommon.ActionCreate
 		case updateOp:
+			if len(resource.Key) == 0 {
+				continue
+			}
 			lwRsp.Action = sdcommon.ActionUpdate
 		case deleteOp:
 			lwRsp.Action = sdcommon.ActionDelete
 		default:
 			log.Warn(fmt.Sprintf("unrecognized action:%s", lwRsp.Action))
 		}
+		lwRsp.Resources = append(lwRsp.Resources, &resource)
 
 		f(lwRsp)
 	}
@@ -132,9 +146,11 @@ func (lw *mongoListWatch) doParseDocumentToResource(fullDocument bson.Raw) (reso
 			log.Error("error to parse bson raw to documentInfo", err)
 			return
 		}
-		resource.Key = instance.Instance.InstanceId
-		resource.Value = instance
-		resource.Index = instance.Instance.ServiceId
+		if instance.Instance != nil {
+			resource.Key = instance.Instance.InstanceId
+			resource.Value = instance
+			resource.Index = instance.Instance.ServiceId
+		}
 	case service:
 		service := model.Service{}
 		err := bson.Unmarshal(fullDocument, &service)
@@ -142,9 +158,11 @@ func (lw *mongoListWatch) doParseDocumentToResource(fullDocument bson.Raw) (reso
 			log.Error("error to parse bson raw to documentInfo", err)
 			return
 		}
-		resource.Key = service.Service.ServiceId
-		resource.Value = service
-		resource.Index = util.StringJoin([]string{service.Domain, service.Project, service.Service.ServiceName, service.Service.Version, service.Service.AppId, service.Service.Environment}, "/")
+		if service.Service != nil {
+			resource.Key = service.Service.ServiceId
+			resource.Value = service
+			resource.Index = util.StringJoin([]string{service.Domain, service.Project, service.Service.ServiceName, service.Service.Version, service.Service.AppId, service.Service.Environment}, "/")
+		}
 	default:
 		return
 	}

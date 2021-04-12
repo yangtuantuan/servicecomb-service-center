@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	DuplicateKey      = 11000
-	CollectionsExists = 48
+	DuplicateKey = 11000
+
+	MsgDBExists  = "already exists"
+	MsgDuplicate = "duplicate key error collection"
 )
 
 func IsDuplicateKey(err error) bool {

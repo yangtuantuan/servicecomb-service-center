@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/apache/servicecomb-service-center/pkg/util"
+	"strings"
 
 	"github.com/go-chassis/go-chassis/v2/storage"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -210,9 +211,8 @@ func EnsureDep() {
 
 func wrapCreateCollectionError(err error) {
 	if err != nil {
-		// commandError can be returned by any operation
-		cmdErr, ok := err.(mongo.CommandError)
-		if ok && cmdErr.Code == client.CollectionsExists {
+		if strings.Contains(err.Error(), client.MsgDBExists) {
+			log.Info(fmt.Sprintf("failed to create collection, %s", err))
 			return
 		}
 		log.Fatal(fmt.Sprintf("failed to create collection with validation, err type: %s", util.Reflect(err).FullName), err)
@@ -221,9 +221,8 @@ func wrapCreateCollectionError(err error) {
 
 func wrapCreateIndexesError(err error) {
 	if err != nil {
-		// commandError can be returned by any operation
-		cmdErr, ok := err.(mongo.CommandError)
-		if ok && cmdErr.Code == client.DuplicateKey {
+		if strings.Contains(err.Error(), client.MsgDuplicate) {
+			log.Info(fmt.Sprintf("failed to create indexes, %s", err))
 			return
 		}
 		log.Fatal(fmt.Sprintf("failed to create indexes, err type: %s", util.Reflect(err).FullName), err)
